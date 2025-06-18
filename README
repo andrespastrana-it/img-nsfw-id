@@ -1,0 +1,148 @@
+# 🔞 OpenNSFW2 Image & Video Classifier API (Docker + FastAPI)
+
+A lightweight and production-ready FastAPI server that wraps the [OpenNSFW2](https://github.com/bhky/opennsfw2) NSFW classifier, allowing image and video content classification via HTTP endpoints. Runs inside a Docker container.
+
+---
+
+## 🚀 Features
+
+- 🔗 Classify image URLs
+- 📁 Upload and classify video files
+- 🧠 Batch image classification
+- 🩺 Health check endpoint
+- 🐳 Fully containerized
+
+---
+
+## 📦 Requirements
+
+- Docker installed
+- Internet connection (for downloading model weights the first time)
+
+---
+
+## 🛠️ How to Build and Run
+
+### 1. Clone this repository
+
+```bash
+git clone https://your-repo-url
+cd your-project-folder
+2. Build the Docker image
+bash
+Copiar
+Editar
+docker build -t open_nsfw .
+3. Run the container on port 8001 (host) mapped to 8000 (container)
+bash
+Copiar
+Editar
+docker run -d -p 8001:8000 --name open_nsfw_api open_nsfw
+Now the API is available at: http://localhost:8001
+
+📘 API Documentation
+Once running, open:
+
+📚 Swagger UI: http://localhost:8001/docs
+📄 ReDoc: http://localhost:8001/redoc
+
+🧪 Endpoints Summary
+✅ GET /health
+Simple health check.
+
+Response:
+
+json
+Copiar
+Editar
+{ "status": "ok" }
+🔍 POST /analyze/image
+Classify an image via URL.
+
+Body:
+
+json
+Copiar
+Editar
+{
+  "url": "https://example.com/image.jpg"
+}
+Response:
+
+json
+Copiar
+Editar
+{
+  "url": "...",
+  "score": 0.8234,
+  "classification": "nsfw",
+  "is_nsfw": true,
+  ...
+}
+You can also pass a custom threshold:
+Copiar
+Editar
+POST /analyze/image?threshold=0.5
+📹 POST /analyze/video
+Upload a video file (e.g., .mp4) for frame-by-frame analysis.
+
+Form field: file
+
+Response:
+
+json
+Copiar
+Editar
+{
+  "filename": "uploaded.mp4",
+  "frame_results": [
+    {
+      "time": 0.0,
+      "score": 0.712,
+      "classification": "mature"
+    },
+    ...
+  ]
+}
+🖼️ POST /classify-images
+Batch classify a list of image URLs.
+
+Body:
+
+json
+Copiar
+Editar
+{
+  "urls": [
+    "https://example.com/1.jpg",
+    "https://example.com/2.png"
+  ]
+}
+🧠 Classification Thresholds
+nsfw: ≥ 0.8
+
+mature: ≥ 0.5
+
+sfw: otherwise
+
+Custom threshold can be passed as a query param to /analyze/image.
+
+🧹 Cleanup / Stop
+Stop and remove the container:
+
+bash
+Copiar
+Editar
+docker stop open_nsfw_api && docker rm open_nsfw_api
+🧾 License
+This project uses OpenNSFW2, licensed under the MIT License.
+
+📫 Contact
+Made by you with andres-pastrana-it ❤️. Want to contribute or suggest improvements? PRs welcome.
+
+vbnet
+Copiar
+Editar
+
+Let me know if you'd like this saved to a downloadable file.
+```
