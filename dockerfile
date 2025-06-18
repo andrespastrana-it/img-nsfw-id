@@ -24,6 +24,8 @@ RUN pip install .
 WORKDIR /app
 COPY main.py .
 
-EXPOSE 8000
+# Use environment variable for port (default 8000)
+ENV APP_PORT=5000
+EXPOSE ${APP_PORT}
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${APP_PORT}"]
