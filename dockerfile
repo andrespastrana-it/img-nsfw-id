@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Python base packages
-RUN pip install --no-cache-dir fastapi uvicorn python-multipart pillow opencv-python-headless
+RUN pip install --no-cache-dir fastapi uvicorn python-multipart pillow opencv-python-headless opencv-python
 
 # Install TensorFlow manually (required for OpenNSFW2)
 RUN pip install --no-cache-dir tensorflow
@@ -22,10 +22,9 @@ RUN pip install .
 
 # Copy FastAPI app
 WORKDIR /app
-COPY main.py .
+COPY . .
 
-# Use environment variable for port (default 8000)
-ENV APP_PORT=5000
-EXPOSE ${APP_PORT}
 
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${APP_PORT}"]
+EXPOSE 8001
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
