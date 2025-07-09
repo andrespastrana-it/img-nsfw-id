@@ -76,31 +76,122 @@ async def analyze_image_by_url(
         raise HTTPException(status_code=400, detail=f"Failed to load or decode image: {str(e)}")
 
     predicted_age = "Unknown"
+    gender = "Unknown"
+    face_detected = False
+    faces_count = 0
 
     try:
-        gray = cv2.cvtColor(np_image, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.1, 5)
+        # Resize image if too large for better detection
+        height, width = np_image.shape[:2]
+        scale_factor = 1.0
+        if max(height, width) > 1024:
+            if height > width:
+                new_height = 1024
+                new_width = int(width * (1024 / height))
+            else:
+                new_width = 1024
+                new_height = int(height * (1024 / width))
+            
+            resized_image = cv2.resize(np_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            scale_factor = max(height, width) / 1024
+        else:
+            resized_image = np_image
 
-        for (x, y, w, h) in faces:
+        # Convert to grayscale
+        gray = cv2.cvtColor(resized_image, cv2.COLOR_BGR2GRAY)
+        
+        # Try multiple detection methods
+        faces = []
+        detection_methods = [
+            # Method 1: Default parameters
+            {'image': gray, 'params': {'scaleFactor': 1.1, 'minNeighbors': 5}},
+            
+            # Method 2: More sensitive parameters
+            {'image': cv2.equalizeHist(gray), 'params': {'scaleFactor': 1.05, 'minNeighbors': 3, 'minSize': (20, 20)}},
+            
+            # Method 3: Very sensitive
+            {'image': cv2.GaussianBlur(cv2.equalizeHist(gray), (3, 3), 0), 'params': {'scaleFactor': 1.03, 'minNeighbors': 2, 'minSize': (15, 15)}},
+            
+            # Method 4: Large faces only
+            {'image': gray, 'params': {'scaleFactor': 1.2, 'minNeighbors': 6, 'minSize': (50, 50)}},
+            
+            # Method 5: With scale image flag
+            {'image': cv2.equalizeHist(gray), 'params': {'scaleFactor': 1.05, 'minNeighbors': 3, 'flags': cv2.CASCADE_SCALE_IMAGE}},
+        ]
+        
+        for i, method in enumerate(detection_methods):
+            try:
+                faces = face_cascade.detectMultiScale(method['image'], **method['params'])
+                if len(faces) > 0:
+                    print(f"Faces detected using method {i+1}: {len(faces)} faces")
+                    break
+            except Exception as e:
+                print(f"Detection method {i+1} failed: {str(e)}")
+                continue
+        
+        faces_count = len(faces)
+        print(f"Total detected faces: {faces_count}")
+        
+        if faces_count > 0:
+            face_detected = True
+            
+            # Scale face coordinates back if image was resized
+            if scale_factor != 1.0:
+                faces = [(int(x * scale_factor), int(y * scale_factor), 
+                         int(w * scale_factor), int(h * scale_factor)) for (x, y, w, h) in faces]
+            
+            # Process the largest face (most likely to be the main subject)
+            largest_face = max(faces, key=lambda face: face[2] * face[3])
+            x, y, w, h = largest_face
+            
+            # Add padding around the face for better detection
+            padding = int(0.1 * min(w, h))
+            x = max(0, x - padding)
+            y = max(0, y - padding)
+            w = min(np_image.shape[1] - x, w + 2 * padding)
+            h = min(np_image.shape[0] - y, h + 2 * padding)
+            
             face_img = np_image[y:y+h, x:x+w]
-            blob = cv2.dnn.blobFromImage(face_img, 1, (227, 227), MODEL_MEAN_VALUES, swapRB=False)
+            
+            # Validate face region
+            if face_img.shape[0] >= 30 and face_img.shape[1] >= 30:
+                mean_intensity = np.mean(face_img)
+                if 20 <= mean_intensity <= 235:  # Not too dark or bright
+                    try:
+                        blob = cv2.dnn.blobFromImage(face_img, 1, (227, 227), MODEL_MEAN_VALUES, swapRB=False)
+                        
+                        # Gender prediction
+                        gender_net.setInput(blob)
+                        gender_preds = gender_net.forward()
+                        gender = gender_list[gender_preds[0].argmax()]
+                        
+                        # Age prediction
+                        age_net.setInput(blob)
+                        age_preds = age_net.forward()
+                        predicted_age = age_list[age_preds[0].argmax()]
+                        
+                        print(f"Predicted - Age: {predicted_age}, Gender: {gender}")
+                    except Exception as e:
+                        print(f"Age/Gender prediction failed: {str(e)}")
+                else:
+                    print(f"Face region lighting issue - mean intensity: {mean_intensity}")
+            else:
+                print(f"Face region too small: {face_img.shape}")
+        else:
+            print("No faces detected in image")
 
-            gender_net.setInput(blob)
-            gender_preds = gender_net.forward()
-            gender = gender_list[gender_preds[0].argmax()]
-
-            age_net.setInput(blob)
-            age_preds = age_net.forward()
-            predicted_age = age_list[age_preds[0].argmax()]
-            break  # Only process the first face for simplicity
-
-        # NSFW check
-        nsfw_prob = n2.predict_image(image)  # Ensure this expects PIL.Image
+        # NSFW check (independent of face detection)
+        nsfw_prob = n2.predict_image(image)
+        
     except Exception as e:
+        print(f"Model inference error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Model inference error: {str(e)}")
 
     return {
         'age': predicted_age,
+        'gender': gender,
+        'face_detected': face_detected,
+        'faces_count': faces_count,
         "url": request.url,
         "score": round(nsfw_prob, 4),
         "sfw_probability": round(1 - nsfw_prob, 4),
@@ -108,7 +199,6 @@ async def analyze_image_by_url(
         "is_nsfw": nsfw_prob > threshold,
         "classification": classify_score(nsfw_prob)
     }
-
 # -------------------------------------
 # 2. Classify Uploaded Video File
 # -------------------------------------
