@@ -67,7 +67,7 @@ async def analyze_image_by_url(
     threshold: float = Query(NSFW_THRESHOLD, ge=0.0, le=1.0)
 ):
     try:
-        response = requests.get(request.url, timeout=10)
+        response = requests.get(request.url, timeout=8000)
         response.raise_for_status()
         image = Image.open(io.BytesIO(response.content)).convert("RGB")
         np_image = np.array(image)
